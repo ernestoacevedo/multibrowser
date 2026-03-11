@@ -35,7 +35,10 @@ func (Launcher) Launch(ctx context.Context, req browser.LaunchRequest) (browser.
 	args := []string{
 		"--no-first-run",
 		"--no-default-browser-check",
+		"--new-window",
 		fmt.Sprintf("--user-data-dir=%s", req.ProfileDir),
+		fmt.Sprintf("--window-position=%d,%d", req.Bounds.X, req.Bounds.Y),
+		fmt.Sprintf("--window-size=%d,%d", req.Bounds.Width, req.Bounds.Height),
 		req.URL,
 	}
 

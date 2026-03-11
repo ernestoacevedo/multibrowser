@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"multibrowser/internal/browser"
+	"multibrowser/internal/layout"
 	"multibrowser/internal/session"
 )
 
@@ -61,6 +62,7 @@ func TestManagerLifecycle(t *testing.T) {
 		URL:      "https://example.com",
 		Count:    2,
 		BaseName: "test",
+		Screen:   layout.ScreenBounds{Width: 1200, Height: 800},
 	}, events); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
@@ -78,6 +80,20 @@ func TestManagerLifecycle(t *testing.T) {
 			t.Fatalf("profile dir %s should be removed, stat err = %v", item.ProfileDir, err)
 		}
 	}
+
+	if len(launcher.requests) != 2 {
+		t.Fatalf("launcher requests = %d, want 2", len(launcher.requests))
+	}
+
+	wantTiles := []browser.WindowBounds{
+		{X: 0, Y: 0, Width: 600, Height: 800},
+		{X: 600, Y: 0, Width: 600, Height: 800},
+	}
+	for i, req := range launcher.requests {
+		if req.Bounds != wantTiles[i] {
+			t.Fatalf("request %d bounds = %+v, want %+v", i, req.Bounds, wantTiles[i])
+		}
+	}
 }
 
 func TestManagerCancellationTerminatesProcesses(t *testing.T) {
@@ -92,6 +108,7 @@ func TestManagerCancellationTerminatesProcesses(t *testing.T) {
 		URL:      "https://example.com",
 		Count:    1,
 		BaseName: "cancel",
+		Screen:   layout.ScreenBounds{Width: 1200, Height: 800},
 	}, events); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
@@ -109,9 +126,11 @@ func TestManagerCancellationTerminatesProcesses(t *testing.T) {
 type fakeLauncher struct {
 	processes []browser.Process
 	index     int
+	requests  []browser.LaunchRequest
 }
 
-func (l *fakeLauncher) Launch(context.Context, browser.LaunchRequest) (browser.Process, error) {
+func (l *fakeLauncher) Launch(_ context.Context, req browser.LaunchRequest) (browser.Process, error) {
+	l.requests = append(l.requests, req)
 	proc := l.processes[l.index]
 	l.index++
 	return proc, nil

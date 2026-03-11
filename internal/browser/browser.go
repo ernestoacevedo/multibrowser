@@ -2,12 +2,21 @@ package browser
 
 import "context"
 
+// WindowBounds describes where a browser window should be placed.
+type WindowBounds struct {
+	X      int
+	Y      int
+	Width  int
+	Height int
+}
+
 // LaunchRequest describes a browser process to start.
 type LaunchRequest struct {
 	Name       string
 	URL        string
 	ProfileDir string
 	BinaryPath string
+	Bounds     WindowBounds
 }
 
 // Process represents a running browser process.

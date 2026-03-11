@@ -12,7 +12,9 @@ import (
 	"syscall"
 
 	"multibrowser/internal/chrome"
+	"multibrowser/internal/layout"
 	"multibrowser/internal/runner"
+	"multibrowser/internal/screen"
 	"multibrowser/internal/session"
 	"multibrowser/internal/ui"
 )
@@ -72,11 +74,16 @@ func runOpen(ctx context.Context, args []string, stdout io.Writer, stderr io.Wri
 	}()
 
 	manager := runner.NewManager(chrome.Launcher{})
+	screenBounds := screen.DetectMainScreen(runCtx)
+	if screenBounds.Width == 0 || screenBounds.Height == 0 {
+		screenBounds = layout.ScreenBounds{Width: 1440, Height: 900}
+	}
 	if err := manager.Start(runCtx, runner.Options{
 		URL:        *url,
 		Count:      *count,
 		BaseName:   *baseName,
 		BinaryPath: *chromePath,
+		Screen:     screenBounds,
 	}, events); err != nil {
 		close(events)
 		done <- err

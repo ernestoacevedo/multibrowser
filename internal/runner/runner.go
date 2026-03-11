@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"multibrowser/internal/browser"
+	"multibrowser/internal/layout"
 	"multibrowser/internal/session"
 )
 
@@ -19,6 +20,7 @@ type Options struct {
 	Count      int
 	BaseName   string
 	BinaryPath string
+	Screen     layout.ScreenBounds
 }
 
 // Result contains the final session state and any cleanup warnings.
@@ -59,9 +61,13 @@ func (m *Manager) Start(ctx context.Context, opts Options, events chan<- session
 	if opts.BaseName == "" {
 		opts.BaseName = "session"
 	}
+	tiles := layout.TileWindows(opts.Count, opts.Screen)
+	if len(tiles) != opts.Count {
+		return fmt.Errorf("unable to compute window tiles for %d sessions", opts.Count)
+	}
 
 	for i := 1; i <= opts.Count; i++ {
-		info, proc, err := m.launchOne(ctx, opts, i)
+		info, proc, err := m.launchOne(ctx, opts, i, tiles[i-1])
 		if err != nil {
 			return err
 		}
@@ -85,7 +91,7 @@ func (m *Manager) emit(events chan<- session.Event, info session.Info) {
 	events <- session.Event{Session: info}
 }
 
-func (m *Manager) launchOne(ctx context.Context, opts Options, id int) (session.Info, browser.Process, error) {
+func (m *Manager) launchOne(ctx context.Context, opts Options, id int, tile layout.WindowBounds) (session.Info, browser.Process, error) {
 	name := fmt.Sprintf("%s-%d", opts.BaseName, id)
 	profileDir, err := os.MkdirTemp("", "multibrowser-"+name+"-")
 	if err != nil {
@@ -106,6 +112,12 @@ func (m *Manager) launchOne(ctx context.Context, opts Options, id int) (session.
 		URL:        opts.URL,
 		ProfileDir: profileDir,
 		BinaryPath: opts.BinaryPath,
+		Bounds: browser.WindowBounds{
+			X:      tile.X,
+			Y:      tile.Y,
+			Width:  tile.Width,
+			Height: tile.Height,
+		},
 	})
 	if err != nil {
 		if removeErr := os.RemoveAll(profileDir); removeErr != nil {

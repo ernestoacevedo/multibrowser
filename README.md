@@ -8,6 +8,7 @@ A Go CLI for launching multiple Google Chrome instances on macOS, each with its 
 
 - Launches multiple Chrome instances in parallel.
 - Creates a separate temporary profile for each instance with `--user-data-dir`.
+- Tiles windows across the main display so they remain visible at the same time.
 - Displays a terminal status panel powered by `bubbletea`.
 - Keeps the CLI in the foreground to manage process lifecycle and cleanup.
 - Removes temporary profile directories when browser instances exit.
@@ -91,6 +92,7 @@ multibrowser open \
 ## Behavior
 
 - Each instance uses its own temporary profile.
+- Windows are automatically arranged in a grid on the main screen.
 - All instances open the same URL in this version.
 - The CLI stays running while the managed browser windows are active.
 - Press `q` or use `Ctrl+C` to stop the managed session.
