@@ -1,139 +1,97 @@
 # multibrowser
 
-A Go CLI for launching multiple Google Chrome instances on macOS, each with its own isolated temporary profile and all opening the same URL.
+Desktop app built with Tauri for launching and managing multiple isolated Google Chrome windows on macOS and Windows.
 
-`multibrowser` is built for local workflows where you need several clean browser sessions at once without manually creating or reusing Chrome profiles.
+The app keeps the original project goal intact:
 
-## Features
+- launch multiple Chrome instances in parallel
+- give each instance its own temporary `--user-data-dir`
+- tile windows across the main display
+- add more instances while the app is running
+- close one managed session or stop all of them
+- clean temporary profiles when browser processes exit
 
-- Launches multiple Chrome instances in parallel.
-- Creates a separate temporary profile for each instance with `--user-data-dir`.
-- Tiles windows across the main display so they remain visible at the same time.
-- Displays an interactive terminal dashboard powered by `bubbletea` and `bubbles`.
-- Keeps the CLI in the foreground to manage process lifecycle and cleanup.
-- Removes temporary profile directories when browser instances exit.
+## Stack
+
+- Tauri v2
+- Rust backend for session management, Chrome launching, tiling, and cleanup
+- React + TypeScript frontend for the desktop UI
 
 ## Requirements
 
-- macOS
-- Go 1.21 or newer
+- Node.js 24+
+- npm 11+
+- Rust/Cargo
+- Tauri system prerequisites for your OS
 - Google Chrome installed
 
-Default Chrome path used by the CLI:
+Supported platforms in this version:
 
-```text
-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome
-```
+- macOS
+- Windows
 
-If Chrome is installed somewhere else, use `--chrome-path`.
+## Run in development
 
-## Installation
-
-To run it locally:
+Install frontend dependencies:
 
 ```bash
-go run . open --url https://example.com --count 3
+npm install
 ```
 
-To build the binary:
+Start the desktop app:
 
 ```bash
-go build -o multibrowser .
+npm run tauri dev
 ```
 
-Then run:
+Or through `make`:
 
 ```bash
-./multibrowser open --url https://example.com --count 3
+make desktop-dev
 ```
 
-To install it into your `PATH` during development:
+## Build
+
+Build the frontend bundle:
 
 ```bash
-go install .
+npm run build
 ```
 
-## Usage
+Build the desktop app:
 
 ```bash
-multibrowser open --url <url> [--count 3] [--base-name session] [--chrome-path /path/to/chrome]
+npm run tauri build
 ```
 
-### Flags
-
-- `--url`: URL to open in all Chrome instances. Required.
-- `--count`: Number of instances to launch. Default: `3`.
-- `--base-name`: Prefix used to name temporary profile directories. Default: `session`.
-- `--chrome-path`: Path to the Chrome binary. Default: the standard macOS path.
-
-### Examples
-
-Open three Chrome instances:
+Or through `make`:
 
 ```bash
-multibrowser open --url https://example.com --count 3
+make desktop-build
 ```
 
-Open five instances with a custom base name:
+## Desktop behavior
+
+- The launch form accepts one URL for the current batch.
+- Chrome is auto-detected from standard install locations.
+- You can override the Chrome path and save it as a default.
+- Each session is tracked with state, PID, tile bounds, and cleanup errors.
+- Existing windows are re-tiled when you add sessions or when one exits.
+
+## Tests
+
+Frontend build check:
 
 ```bash
-multibrowser open --url https://news.ycombinator.com --count 5 --base-name work
+npm run build
 ```
 
-Use a non-standard Chrome installation:
+Rust backend tests:
 
 ```bash
-multibrowser open \
-  --url https://example.com \
-  --count 2 \
-  --chrome-path "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-## Behavior
+## Legacy Go code
 
-- Each instance uses its own temporary profile.
-- Windows are automatically arranged in a grid on the main screen.
-- All instances open the same URL in this version.
-- The CLI stays running while the managed browser windows are active.
-- You can move through the session list with the keyboard.
-- You can close the selected instance or launch more instances directly from the TUI.
-- Press `q` or use `Ctrl+C` to stop the managed session.
-- When a process exits, the CLI attempts to delete its temporary profile directory.
-
-### TUI controls
-
-- `up` / `k`: move up
-- `down` / `j`: move down
-- `a`: open the add-instances form
-- `x`: close the selected Chrome instance
-- `enter`: confirm the add form
-- `esc`: close the add form
-- `q`: stop all managed instances and exit
-
-## Development
-
-Run tests:
-
-```bash
-env GOCACHE=/tmp/gocache GOMODCACHE=/tmp/gomodcache go test ./...
-```
-
-Run the race detector for the runner:
-
-```bash
-env GOCACHE=/tmp/gocache GOMODCACHE=/tmp/gomodcache go test -race ./internal/runner
-```
-
-## Current limitations
-
-- macOS only
-- Google Chrome only
-- One global URL per execution
-- Temporary profiles only; no persistent profiles yet
-
-## Roadmap
-
-- Support additional browsers such as Firefox and Safari
-- Add per-instance URL support
-- Add persistent profile mode
-- Add configuration file support for reusable launch sets
+The original Go CLI remains in the repo as migration reference. The active desktop product is the Tauri app under [`src-tauri`](/Users/ernesto/scripts/multibrowser/src-tauri) and [`src`](/Users/ernesto/scripts/multibrowser/src).
