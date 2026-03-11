@@ -81,18 +81,23 @@ func TestManagerLifecycle(t *testing.T) {
 		}
 	}
 
-	if len(launcher.requests) != 2 {
-		t.Fatalf("launcher requests = %d, want 2", len(launcher.requests))
+	requests := launcher.snapshotRequests()
+	if len(requests) != 2 {
+		t.Fatalf("launcher requests = %d, want 2", len(requests))
 	}
 
 	wantTiles := []browser.WindowBounds{
 		{X: 0, Y: 0, Width: 600, Height: 800},
 		{X: 600, Y: 0, Width: 600, Height: 800},
 	}
-	for i, req := range launcher.requests {
+	for i, req := range requests {
 		if req.Bounds != wantTiles[i] {
 			t.Fatalf("request %d bounds = %+v, want %+v", i, req.Bounds, wantTiles[i])
 		}
+	}
+
+	if len(launcher.snapshotRetiles()) == 0 {
+		t.Fatal("expected at least one retile call")
 	}
 }
 
@@ -123,17 +128,95 @@ func TestManagerCancellationTerminatesProcesses(t *testing.T) {
 	}
 }
 
+func TestManagerAddAndTerminateSession(t *testing.T) {
+	t.Parallel()
+
+	proc1 := &fakeProcess{pid: 301, blockWait: true}
+	proc2 := &fakeProcess{pid: 302, blockWait: true}
+	launcher := &fakeLauncher{processes: []browser.Process{proc1, proc2}}
+	manager := NewManager(launcher)
+	events := make(chan session.Event, 16)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := manager.Start(ctx, Options{
+		URL:      "https://example.com",
+		Count:    1,
+		BaseName: "live",
+		Screen:   layout.ScreenBounds{Width: 1200, Height: 800},
+	}, events); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	if err := manager.Add(ctx, 1); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	if len(launcher.snapshotRequests()) != 2 {
+		t.Fatalf("launcher requests = %d, want 2", len(launcher.snapshotRequests()))
+	}
+
+	if err := manager.TerminateSession(ctx, 1); err != nil {
+		t.Fatalf("TerminateSession() error = %v", err)
+	}
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if proc1.isTerminated() {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !proc1.isTerminated() {
+		t.Fatal("expected first process to terminate")
+	}
+
+	deadline = time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if len(launcher.snapshotRetiles()) >= 2 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("retile calls = %d, want at least 2", len(launcher.snapshotRetiles()))
+}
+
 type fakeLauncher struct {
-	processes []browser.Process
-	index     int
-	requests  []browser.LaunchRequest
+	processes   []browser.Process
+	index       int
+	requests    []browser.LaunchRequest
+	retileCalls [][]browser.WindowBounds
+	mu          sync.Mutex
 }
 
 func (l *fakeLauncher) Launch(_ context.Context, req browser.LaunchRequest) (browser.Process, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.requests = append(l.requests, req)
 	proc := l.processes[l.index]
 	l.index++
 	return proc, nil
+}
+
+func (l *fakeLauncher) Retile(_ context.Context, bounds []browser.WindowBounds) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	copied := append([]browser.WindowBounds(nil), bounds...)
+	l.retileCalls = append(l.retileCalls, copied)
+	return nil
+}
+
+func (l *fakeLauncher) snapshotRequests() []browser.LaunchRequest {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]browser.LaunchRequest(nil), l.requests...)
+}
+
+func (l *fakeLauncher) snapshotRetiles() [][]browser.WindowBounds {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([][]browser.WindowBounds(nil), l.retileCalls...)
 }
 
 type fakeProcess struct {

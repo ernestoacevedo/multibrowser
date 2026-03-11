@@ -66,12 +66,6 @@ func runOpen(ctx context.Context, args []string, stdout io.Writer, stderr io.Wri
 	events := make(chan session.Event, *count*4)
 	done := make(chan error, 1)
 	managerDone := make(chan struct{})
-	uiQuit := make(chan struct{})
-
-	go func() {
-		<-uiQuit
-		cancel()
-	}()
 
 	manager := runner.NewManager(chrome.Launcher{})
 	screenBounds := screen.DetectMainScreen(runCtx)
@@ -91,7 +85,7 @@ func runOpen(ctx context.Context, args []string, stdout io.Writer, stderr io.Wri
 	}
 
 	go func() {
-		result := manager.Wait(runCtx)
+		result := manager.Wait(context.Background())
 		close(events)
 
 		var errs []error
@@ -105,7 +99,15 @@ func runOpen(ctx context.Context, args []string, stdout io.Writer, stderr io.Wri
 		close(managerDone)
 	}()
 
-	if err := ui.Run(stdout, events, done, uiQuit); err != nil {
+	if err := ui.Run(stdout, events, done, ui.Callbacks{
+		AddInstances: func(extra int) error {
+			return manager.Add(runCtx, extra)
+		},
+		CloseSession: func(id int) error {
+			return manager.TerminateSession(runCtx, id)
+		},
+		QuitAll: cancel,
+	}); err != nil {
 		return err
 	}
 

@@ -30,3 +30,8 @@ type Process interface {
 type Launcher interface {
 	Launch(context.Context, LaunchRequest) (Process, error)
 }
+
+// Retiler repositions existing browser windows.
+type Retiler interface {
+	Retile(context.Context, []WindowBounds) error
+}

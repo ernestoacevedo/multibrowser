@@ -8,6 +8,7 @@ type State string
 const (
 	StateStarting State = "starting"
 	StateRunning  State = "running"
+	StateStopping State = "stopping"
 	StateExited   State = "exited"
 	StateFailed   State = "failed"
 	StateCleaned  State = "cleaned"
@@ -20,6 +21,10 @@ type Info struct {
 	URL        string
 	ProfileDir string
 	PID        int
+	X          int
+	Y          int
+	Width      int
+	Height     int
 	State      State
 	Error      string
 	StartedAt  time.Time

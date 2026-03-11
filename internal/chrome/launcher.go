@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -47,11 +49,21 @@ func (Launcher) Launch(ctx context.Context, req browser.LaunchRequest) (browser.
 		return nil, fmt.Errorf("start chrome: %w", err)
 	}
 
-	return &process{cmd: cmd}, nil
+	return newProcess(cmd), nil
 }
 
 type process struct {
-	cmd *exec.Cmd
+	cmd      *exec.Cmd
+	waitOnce sync.Once
+	done     chan struct{}
+	waitErr  error
+}
+
+func newProcess(cmd *exec.Cmd) *process {
+	return &process{
+		cmd:  cmd,
+		done: make(chan struct{}),
+	}
 }
 
 func (p *process) PID() int {
@@ -63,25 +75,24 @@ func (p *process) PID() int {
 }
 
 func (p *process) Wait() error {
-	return p.cmd.Wait()
+	p.startWait()
+	<-p.done
+	return p.waitErr
 }
 
 func (p *process) Terminate(ctx context.Context) error {
 	if p.cmd.Process == nil {
 		return nil
 	}
+	p.startWait()
 
 	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		return fmt.Errorf("send SIGTERM: %w", err)
 	}
 
-	waitCh := make(chan error, 1)
-	go func() {
-		waitCh <- p.cmd.Wait()
-	}()
-
 	select {
-	case err := <-waitCh:
+	case <-p.done:
+		err := p.waitErr
 		if err != nil && !isExitError(err) {
 			return err
 		}
@@ -90,13 +101,13 @@ func (p *process) Terminate(ctx context.Context) error {
 		if killErr := p.cmd.Process.Kill(); killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
 			return fmt.Errorf("kill process after timeout: %w", killErr)
 		}
-		<-waitCh
+		<-p.done
 		return fmt.Errorf("terminate timed out: %w", ctx.Err())
 	case <-time.After(5 * time.Second):
 		if killErr := p.cmd.Process.Kill(); killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
 			return fmt.Errorf("kill process after grace period: %w", killErr)
 		}
-		<-waitCh
+		<-p.done
 		return nil
 	}
 }
@@ -104,4 +115,40 @@ func (p *process) Terminate(ctx context.Context) error {
 func isExitError(err error) bool {
 	var exitErr *exec.ExitError
 	return errors.As(err, &exitErr)
+}
+
+func (p *process) startWait() {
+	p.waitOnce.Do(func() {
+		go func() {
+			p.waitErr = p.cmd.Wait()
+			close(p.done)
+		}()
+	})
+}
+
+// Retile best-effort repositions all visible Chrome windows.
+func (Launcher) Retile(ctx context.Context, bounds []browser.WindowBounds) error {
+	if len(bounds) == 0 {
+		return nil
+	}
+
+	lines := []string{
+		`tell application "Google Chrome"`,
+		`if not running then return`,
+	}
+	for idx, bound := range bounds {
+		lines = append(lines,
+			fmt.Sprintf("if (count of windows) >= %d then", idx+1),
+			fmt.Sprintf("set bounds of window %d to {%d, %d, %d, %d}", idx+1, bound.X, bound.Y, bound.X+bound.Width, bound.Y+bound.Height),
+			"end if",
+		)
+	}
+	lines = append(lines, "end tell")
+
+	cmd := exec.CommandContext(ctx, "osascript", "-e", strings.Join(lines, "\n"))
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("retile chrome windows: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+
+	return nil
 }
